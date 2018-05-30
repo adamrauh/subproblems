@@ -137,7 +137,7 @@ I conclude from this that when merging solutions to separate subproblems, the fi
 
 ## Introducing overflow node to similar networks
 
-Suppose we are now considering a set of similar problems, but we now introduce an overflow node into the network. As before, cases considered are somewhat simplified from what they might be in an actual `optmatch` network.
+Suppose we are now considering a set of similar problems, but we now introduce an overflow node into the network. As before, cases considered are somewhat simplified from what they might be in an actual `optmatch` network. Other restrictions/details might also be removed or altered from `optmatch` situations.
 
 Let's re-examine a slightly modified previous system, with the addition of a new "overflow" node. Let's also say that in this example, we are prohibiting many-one t:c matches as well.
 
@@ -145,70 +145,53 @@ Let's re-examine a slightly modified previous system, with the addition of a new
 graph LR
 t1[p=22,s=1] -- a=4 --> c1((p=20))
 t1 == a=0 ==> c2((p=21))
-c1 --> Sink{p<=21, s=-1}
+c1 --> Sink{20<=p<=21, s=-1}
 c2 ==> Sink
 t2[p=40,s=1] -- a=300 --> c3((p=20))
 t2 -- a=100 --> c4((p=30))
 c3 --> Sink
 c4 --> Sink
 
-t1 --> Overflow[overflow, s = -1, p <= 40]
+t1 --> Overflow[overflow, s = -1, 21<=p<=40]
 t2 ==> Overflow
 ```
 
-With bold lines indicating arcs with flow being sent across, this example suggests that the price of a sink node and the price of an overflow node are not meaningfully related. Here, the price of the sink node depends on the prices of control nodes which are sending flow to it. In contrast, the overflow node price is entirely a function of treatment node prices. While in this instance the ranges overlap, one can see that it is possible to construct instances where they do not by adding more nodes to introduce upper and lower bounds. At this stage, one could not cycle t/c node prices up or down because this would require a similar adjustment for all other nodes in the network, negating the change.
+This first example does suggest that the relationship between the sink node price and overflow price are not meaningfully related, in this particular situation, at least. Broadly speaking, the sink node is a function of the prices of the control nodes only. The overflow node is a function of both treatment and control node prices. In this particular network structure, the node price for c2 sets an upper bound for the sink node price, but forms a lower bound for the overflow node price. If this generalizes, this is noteworthy.
+
 
 
 Abstracting some of this thought more:
 
 ```mermaid
 graph LR
-t1[T1, s = 1] --> c1
-t1 ==> c2
-t1 --> c3
-t1 --> c4
-t2[T2, s = 1] ==> c1
-t2 --> c2
-t2 --> c3
-t2 --> c4
-t1 --> c1
-t1 --> c2
-t1 --> c3
-t3[T3, s =1] -- a = Inf --> c1
-t3 -- a = Inf --> c2
-t3 -- a = Inf --> c3
-t3 -- a = Inf --> c4
-c1 ==> Sink{Sink, s = -2}
-c2 ==> Sink
-c3 --> Sink
-t1 --> Overflow[Overflow, s = -2]
-t2 --> Overflow
-t3 ==> Overflow
-T4[T4, s = 1]-- a = Inf --> c1
-T4-- a = Inf --> c2
-T4-- a = Inf --> c3
-T4-- a = Inf --> c4
-c4 --> Sink
-T4 ==> Overflow
-```
-Without assigning specific prices, it seems that the price of the sink node will be determined as a function of c1 -c4, but the Overflow node price is a function of T1-T4 -- specifically here, just T3 and T4. Again, since the differences between treatment and control node prices needs to be maintained, there isn't any room to make meaningful adjustments. The range of possible values for Sink and Overflow, might overlap, but it is not guaranteed. I would further conclude that a process of aligning these two node prices is not usually possible.
 
+t1[T1, s = 1] ==> c2
+t2[T2, s = 1] ==> c1
+c1 --> Sink[s = ?]
+c2 --> Sink
+c3 --> Sink
+c4 --> Sink
+
+t3[T3, s =1] ==> Overflow[Overflow, s = ?]
+
+```
+Say that T1 and T2 are sending flow-- without assigning specific prices, it seems that the price of the sink node will be determined as a function of c1 -c4. Assuming supply/demand is met appropriately, the price of the sink node must be set such that it is less than or equal to both of c1 and c2-- p<=c1 and p <=c2. There might be other constraints, depending on the other aspects of the problem. However, the overflow node price must be set to be less than T3, and greater than max(c1, c2). If this second requirement was not satisfied, then flow will be directed to the overflow node from T1 or T2, rather than to a control node.
+
+This also seems to suggest that in this type of a network, there is no reason to believe that adjusting node prices in the way described previously to merge problems will allow a simultaneous merge of overflow nodes.
 
 ### Permitting many-one treament:control matches with an overflow node
 
-I suspect that if only treatment nodes are sending flow to the overflow node, then the same rules and conclusion apply, as the structure is essentially the same.
-
-Looking at something a little different...
+If we permit many-one t/c matches and add an overflow node, we can sketch something impossible (I think) like the following:
 ```mermaid
 graph LR
-t1[p=22,s=1] --> c1((p=20))
-t1 ==> c2((p=21))
-c1 --> Sink{p<=21, s=-1}
+t1[p=22,s=1] -- a = Inf--> c1((p=20))
+t1 == a = 0==> c2((p=21))
+c1 --> Sink{20<=p<=21, s=-1}
 c2 ==> Sink
-t2[p=40,s=1] --> c3((p=20))
-t2 --> c4((p=30))
-t2 --> c1
-t2 ==> c2
+t2[p=40,s=1] --a = Inf--> c3((p=20))
+t2 --a = Inf--> c4((p=30))
+t2 --a = Inf--> c1
+t2 ==a = 0 ==> c2
 t1 --> c3
 t1 --> c4
 c3 --> Sink
@@ -216,17 +199,4 @@ c4 --> Sink
 
 c2 ==> Overflow[overflow, s = -1, p <= 21]
 ```
-
-Here's a possible scenario where the sink and overflow node could align exactly.  That is, when a shared set (in this case, just one) control nodes will define the prices of both sink and overflow nodes.
-
-
-Now, let's see if another counter-example can be created under the new conditions. say p(t1) = 0 and p(c1) = 50. Then we could set p(sink) = 25, p(overflow) = -1 and everything is satisfied, but the prices are different due to the different restrictions. However, this does seem to suggest that having a shared control node might provide a range values or value that could be used by both sink and overflow nodes. say P(sink) = P(overflow) = -1. This would give a shared equal value and still work as a solution.
-```mermaid
-graph LR
-
-t1 ==> overflow[overflow, s=-2]
-t2 ==> c1
-c1 ==> overflow
-c1 ==> sink[sink, s = -1]
-t3 ==> c1
-```
+If multiple T nodes are matched to a C node, then that control node will be dealing with some excess supply. How can it ever direct flow to the overflow node? the c node price must be less than the T node price from which it is receiving flow. If the overflow node price is set so that it can accept flow -- wouldn't it be better to just bypass the control node and set the overflow price more optimally to deal with that supply? Or perhaps other restrictions prevent this kind of thing...I'm not sure.
